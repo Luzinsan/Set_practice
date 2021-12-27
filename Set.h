@@ -1,8 +1,8 @@
 #pragma once
-
+#include <iomanip>
 // Сортировка Quicksort
 //template <class T>
-const int* quickSort(int* numbers, int left, int right)
+ int* const quickSort( int *const numbers, int left, int right)
 {
     // Инициализируем разрешающий элемент, левую границу, правую границу
     int pivot = numbers[left], l_hold = left, r_hold = right;
@@ -44,38 +44,44 @@ private:
 
 public:
     
-    Set(int length = 0, int* item = nullptr) : m_length{ length }, m_item{ item }
+    Set(int length = 0, int* const item = nullptr) : m_length{ length }
     {
         if (m_length < 0) throw std::invalid_argument("Размер множества не может быть отрицательным");
-        if (m_item)
+        if (item)
         {
-            quickSort(m_item, 0, m_length - 1);
-            int new_lenght = 1;
-            int* new_item = new int[m_length];
-            new_item[0] = m_item[0];
-            for (unsigned i = 1; i < (unsigned)m_length; i++)
-                if (m_item[i] != m_item[i - 1]) new_item[new_lenght++] = m_item[i];
-            m_length = new_lenght;
-            
-            delete[] m_item;
-            m_item = new_item;
-        }
-        else if (m_length) m_item = (int*)malloc(m_length * sizeof(int));
+            m_item = (int*)malloc(m_length * sizeof(int));
+            for (int i = 0; i < m_length; i++)
+                m_item[i] = item[i];
 
-        for (int i = 0; i < m_length; i++)
-            std::cout << m_item[i] << "\t";
+            quickSort(m_item, 0, m_length - 1); // быстрая сортировка
+            unsigned new_lenght = 1; // фактическая длина множества
+           
+            for (unsigned i = 1; i < (unsigned)m_length; i++)
+                // если в упорядоченном массиве текущий элемент отличается от предыдущего 
+                // - то добавляем этот элемент в множество, и увеличиваем длину множества +1
+                if (m_item[i] != m_item[i - 1]) m_item[new_lenght++] = m_item[i]; 
+            
+            if (m_length != new_lenght) // если уникальных элементов меньше, чем всего элементов было в массиве
+            { // то обрезаем массив
+                m_length = new_lenght;
+                if (!(m_item = (int*)realloc(m_item, m_length * sizeof(int)))) throw std::bad_alloc();
+            }
+        }
+        else if (m_length) 
+             if(!(m_item = (int*)malloc(m_length * sizeof(int)))) throw std::bad_alloc();
+            
     }
+
+    Set(const Set& fromSet)
+        : Set(fromSet.m_length, fromSet.m_item)  { }
 
     
-    Set(const Set& fromSet)
-        : m_length{ fromSet.m_length },
-          m_item{ fromSet.m_item } { }
-    Set(Set&& fromSet) 
-    {
-        std::swap(m_length, fromSet.m_length);
-        std::swap(m_item, fromSet.m_item);
+    ~Set() 
+    { 
+        if(m_item) 
+            delete[] m_item; 
     }
-    ~Set() { delete[] m_item; }
+
     static bool isProperSubset(const Set& set, const Set& withSet)
     {
         return set.m_length && !(set == withSet);  
@@ -84,14 +90,17 @@ public:
     {
         return !isProperSubset(set, withSet);
     }
-    Set& operator=(const Set& fromSet) 
+    const Set& operator=(const Set& fromSet) 
     {
         if (this == &fromSet)
             return *this;
 
-        delete[] m_item;
-        m_length = fromSet.m_length;
-        m_item = (int*)malloc( m_length * sizeof(int));
+        if (m_length != fromSet.m_length)
+        {
+            m_length = fromSet.m_length;
+            delete[] m_item;
+            m_item = (int*)malloc(m_length * sizeof(int));
+        }
         for (unsigned i = 0; i < (unsigned)m_length; i++)
             m_item[i] = fromSet.m_item[i];
         return *this;
@@ -103,6 +112,8 @@ public:
 
         std::swap(m_length, fromSet.m_length);
         std::swap(m_item, fromSet.m_item);
+        delete[] fromSet.m_item;
+        fromSet.m_item = nullptr;
         return *this;
     }
     int& operator[](int index)
@@ -117,7 +128,11 @@ public:
     }
     int getLength() { return m_length; };
     bool isEmpty() { return !m_length; }
-
+    Set(Set&& fromSet) noexcept : m_length{ fromSet.m_length }
+    {
+        std::swap(m_item, fromSet.m_item);
+        fromSet.m_item = nullptr;
+    }
     friend bool operator==(const Set& set1, const Set& set2)
     {
         if (set1.m_length != set2.m_length) return false;
@@ -129,75 +144,162 @@ public:
     {
         return !(set1 == set2);
     }
-    
-    
+
+    // конъюнкция
+    const Set& operator&=( const Set& set)
+    {
+        int temp_size = 0;
+        int* temp_set = (int*)malloc(set.m_length * sizeof(int));
+        int left_border = 0;
+        bool flag = true;
+        for (unsigned i = 0; i < (unsigned)m_length; i++)
+        {
+            bool flag = true;
+            for (unsigned j = left_border; set.m_item[j] <= m_item[i]; j++)
+                if (m_item[i] == set.m_item[j])
+                {
+                    temp_set[temp_size++] = set.m_item[j];
+                    left_border = j + 1;
+                    flag = false;
+                }
+            if (m_item[i] >= set.m_item[left_border] && flag) left_border++;
+        }
+        m_length = temp_size;
+        std::swap(m_item, temp_set);
+        return *this;
+    }
     friend Set operator&&(const Set& set1, const Set& set2)
     {
         return Set(set1) &= set2;
     }
-   
-    
-    
-    const Set& append(int element) 
+    const Set& operator*=(const Set& set)
     {
-        for (unsigned i = 0; i < (unsigned)m_length-1; i++)
+        *this &= set;
+        return *this;
+    }
+    friend Set operator*(const Set& set1, const Set& set2) 
+    {
+        return Set(set1) &= set2;
+    }
+    
+
+    // дизъюнкция
+    const Set& operator|=(const Set& set) 
+    {
+        Set temp_set;
+        unsigned left_border = 0; // левая граница второго множества
+        
+        bool flag;
+        for (unsigned i = 0; i < (unsigned)m_length; i++)
+        {
+            temp_set.m_length++;
+            temp_set.m_item = (int*)realloc(temp_set.m_item, temp_set.m_length * sizeof(int));
+            temp_set.m_item[temp_set.m_length - 1] = m_item[i]; // заносим текущий элемент из первого множества
+            flag = true;
+            // и проходимся по элементам второго множества от левой границы занесённых элементов,
+            // пока не дойдём до текущего элемента первого множества
+            for (unsigned j = left_border;  set.m_item[j] <= m_item[i]; j++) 
+            {
+                temp_set += set.m_item[j]; // append в нужное место
+                left_border = j+1;  
+                flag = false;
+            }
+            if (m_item[i] >= set.m_item[left_border] && flag) left_border++;
+        }
+        for (unsigned j = left_border; j < (unsigned)set.m_length; j++)
+        {// заполняем оставшиеся элементы из второго множества
+            temp_set.m_length++;
+            temp_set.m_item = (int*)realloc(temp_set.m_item, temp_set.m_length * sizeof(int));
+            temp_set.m_item[temp_set.m_length - 1] = set.m_item[j]; 
+        }
+
+        m_item = temp_set.m_item;
+        m_length = temp_set.m_length;
+        temp_set.m_item = nullptr;
+        return *this;
+    }
+    friend Set operator||(const Set& set1,  const Set& set2)
+    {
+        return Set(set1)|=set2;
+    }
+    const Set& operator+=(const Set& set)
+    {
+       
+        return  *this |= set;
+    }
+    friend Set operator+(const Set& set1,  const Set& set2)
+    {
+        return Set(set1) |= set2;
+    }
+    
+    
+    // Добавление элемента в множество
+    const Set& operator|=(const int& element) 
+    {
+        if (!m_length) 
+        {
+            m_length = 1;
+            m_item = (int*)realloc(m_item, sizeof(int));
+            return *this;
+        }
+
+        for (unsigned i = 0; i < (unsigned)m_length; i++)
         {
             int shift_element = 0;
-            if (m_item[i] = element) return *this;
-            else if (m_item[i] > element)
+            if ( element == m_item[i] ) return *this;
+            if ( element < m_item[i])
             {
                 shift_element = m_item[i];
                 m_item[i] = element;
-                for (unsigned j = i + 1; j < (unsigned)m_length-2; j++)
+                for (unsigned j = i + 1; j < (unsigned)m_length-1; j++)
                 {
                     m_item[j] = shift_element;
                     shift_element = m_item[j + 1];
                 }
-
-                m_item = (int*)realloc(m_item, (m_length + 1) * sizeof(int));
+                m_length++;
+                m_item = (int*)realloc(m_item, m_length * sizeof(int));
                 m_item[m_length - 1] = shift_element;
                 return *this;
             }
         }
+        m_length++;
+        m_item = (int*)realloc(m_item, m_length * sizeof(int));
+        m_item[m_length - 1] = element;
+        return *this;
     }
-    const Set& operator&=(const Set& set) // конъюнкция
+    friend Set operator||(const Set& set, const int& element)
     {
-        int temp_size = 0;
-        int* temp_set = (int*)malloc( set.m_length * sizeof(int));
-        int left_border = 0;
-        for (unsigned i = 0; i < (unsigned)set.m_length; i++)
-            for (unsigned j = left_border; m_item[j] <= set.m_item[i]; j++)
-                if (m_item[j] == set.m_item[i]) 
-                { 
-                    temp_set[temp_size++] = set.m_item[i];
-                    left_border = j;
-                }
-        m_length = temp_size;
-        std::swap(m_item, temp_set);
-        return set;
+        return Set(set) |= element;
     }
-    friend Set operator||(const Set& set1, const Set& set2)
+    const Set& operator+=(const int& element)
     {
-        return Set(set1)|=set2;
+        *this |= element;
+        return *this;
     }
-    const Set& operator|=(const Set& set) //дизъюнкция
+    friend Set operator+(const Set& set, const int& element)
     {
-        unsigned temp_size = 0;
-        int* temp_set = (int*)malloc( set.m_length * sizeof(int));
-        unsigned left_border = 0;
-        for (unsigned i = 0; i < (unsigned)set.m_length; i++)
-        {
-            temp_set[temp_size] = set.m_item[i];
-            for (unsigned j = left_border; m_item[j] < set.m_item[i]; j++)
-            {
-                temp_set[temp_size++] = set.m_item[i];
-                left_border = j;
-            }
-        }
+        return Set(set) |= element;
+    }
+
+    friend std::ostream& operator<<(std::ostream& out, const Set& set)
+    {
+        std::streamsize size = std::cout.width();
+        if (!size) size = 10;
         
-        m_length = temp_size;
-        std::swap(m_item, temp_set);
-        return set;
+        for (unsigned i = 0; i < set.m_length; i++)
+            out << std::fixed << std::setprecision(2) << std::setw(size) << set.m_item[i];
+        out << "\n";
+        return out;
+    }
+    friend std::istream& operator>>(std::istream& in, Set& set) 
+    {
+        int element = 0;
+        for (int i = 0; i < set.m_length; i++)
+        {
+            in >> element;
+            set |= element;
+        }
+        return in;
     }
 };
 
